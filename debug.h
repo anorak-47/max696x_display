@@ -17,7 +17,7 @@
 //#define noinline __attribute__((noinline))
 
 /* define macros, if debug is enabled */
-#ifdef DEBUG_UART
+#if defined(DEBUG_UART) | defined(SB_WITH_CMDPARSER)
 #define initDebug() debug_init_uart()
 #define debug_printf(s, args...) printf_P(PSTR(s), ## args)
 #else  /* not DEBUG */

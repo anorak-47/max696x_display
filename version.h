@@ -1,8 +1,8 @@
 #ifndef __VERSION_H__
 #define __VERSION_H__
 
-#define VERSION_MAJOR 1
-#define VERSION_MINOR 6
+#define VERSION_MAJOR 2
+#define VERSION_MINOR 3
 
 #define xstr(s) str(s)
 #define str(s) #s

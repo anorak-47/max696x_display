@@ -72,9 +72,11 @@ bool set_animation(uint8_t animation_number)
     {
     case MATRIX_CMD_ANIMATE_SWEEP:
         set_animation_sweep();
+        current_animation = animation_number | MATRIX_CMD_ANIMATION;
         break;
     case MATRIX_CMD_ANIMATE_BOX:
         set_animation_box();
+        current_animation = animation_number | MATRIX_CMD_ANIMATION;
         break;
     case MATRIX_CMD_ANIMATE_SHOW_TEXT:
         set_animation_show_text();
@@ -84,14 +86,12 @@ bool set_animation(uint8_t animation_number)
         break;
     case MATRIX_CMD_ANIMATE_TYPEMATRIX:
         set_animation_typematrix();
+        current_animation = animation_number | MATRIX_CMD_ANIMATION;
         break;
     default:
         found = false;
         break;
     }
-
-    if (found)
-        current_animation = animation_number | MATRIX_CMD_ANIMATION;
 
     return found;
 }
@@ -167,10 +167,10 @@ void animation_set_speed(uint16_t speed)
 
 void animation_set_typematrix_key(uint8_t row_number, matrix_row_t row)
 {
-    if (current_animation != MATRIX_CMD_ANIMATE_TYPEMATRIX)
-        return;
+    //if (!animation_is_running() || current_animation != MATRIX_CMD_ANIMATE_TYPEMATRIX)
+    //    return;
 
-    LS_("set_typematrix_key");
+    //LS_("set_typematrix_key");
 
     update_typematrix(row_number, row);
 }
@@ -178,6 +178,8 @@ void animation_set_typematrix_key(uint8_t row_number, matrix_row_t row)
 void animation_set_lock_state(uint8_t locks)
 {
     LS_("set_lock_state");
+
+    //TODO
 }
 
 void cb_info_text(void *)
@@ -223,6 +225,16 @@ void animation_toggle(void)
 bool animation_is_running()
 {
     return (animation.is_running);
+}
+
+bool animation_is_paused()
+{
+    return (animation.is_paused);
+}
+
+uint8_t get_current_animation()
+{
+	return current_animation;
 }
 
 void pause_animation()

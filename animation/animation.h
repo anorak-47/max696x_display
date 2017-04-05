@@ -17,6 +17,8 @@ void animation_increase_speed(void);
 void animation_decrease_speed(void);
 void animation_set_speed(uint16_t speed);
 bool animation_is_running(void);
+bool animation_is_paused(void);
+uint8_t get_current_animation(void);
 
 void animation_set_typematrix_key(uint8_t row_number, matrix_row_t row);
 void animation_set_lock_state(uint8_t locks);

@@ -152,7 +152,7 @@ void initKeys(void)
     TCNT2 = (uint8_t)(int16_t) - (F_CPU / 1024 * 10e-3 + 0.5); // preload for 10ms
     TIMSK2 |= (1 << TOIE2);                                    // Compare Interrupt erlauben
 
-    LV_("TCNT2=%u\n", (uint8_t)(int16_t) - (F_CPU / 1024 * 10e-3 + 0.5));
+    //LV_("TCNT2=%u\n", (uint8_t)(int16_t) - (F_CPU / 1024 * 10e-3 + 0.5));
 #endif
 
     sei();

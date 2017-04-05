@@ -40,6 +40,7 @@
 #include "command.h"
 #include "animation/animation.h"
 #include "max696x_device.h"
+#include "interrupt.h"
 
 #ifndef F_CPU
 #warning------ F_CPU not defined! ------
@@ -69,6 +70,7 @@
 uint16_t ee_dummy EEMEM = 0xadda;
 uint8_t ee_activity_led_blink_enabled EEMEM = 1;
 uint8_t ee_matrix_brightness EEMEM = 16;
+uint8_t ee_matrix_config EEMEM = 0;
 
 /*
  * globals
@@ -110,6 +112,9 @@ void restore_saved_state(void)
     global.state.height = (NUMBER_OF_DRIVER_DEVICES / NUMBER_OF_DRIVERS_PER_ROW) * 8;
     global.state.major_version = VERSION_MAJOR;
     global.state.minor_version = VERSION_MINOR;
+    global.state.minimal_animation_id = MATRIX_FIRST_ANIMATION;
+    global.state.maximal_animation_id = MATRIX_LAST_ANIMATION;
+    global.state.config.raw = eeprom_read_byte(&ee_matrix_config);
 }
 
 void blink_init_start()
@@ -141,16 +146,18 @@ void initialize(void)
     PRR |= _BV(PRTIM1);
 
     LS_("max696x_cpu v" VERSION " " COMPILED_TS);
-    LV_("MCUSR=%x", mcusr_mirror);
+    //LV_("MCUSR=%x", mcusr_mirror);
 
     initCommand();
     initAnimation();
+    init_interrupts();
     initLED();
     blink_init_start();
     initTimer();
     initKeys();
-    initCommunicationTwi(SB_LOCAL_I2C_SLAVE_ADDRESS);
     initializeMatrixDisplay();
+    release_interrupts();
+    initCommunicationTwi(SB_LOCAL_I2C_SLAVE_ADDRESS);
 
 #ifdef SB_WITH_CMDPARSER
     parserInit();
@@ -169,27 +176,29 @@ int main(void)
 
     restore_saved_state();
     initialize();
-    // WITH_WATCHDOG(enter_power_down_on_repearted_watchdog_reset());
 
     while (1)
     {
         WITH_WATCHDOG(wdt_reset());
+
+#ifdef SB_WITH_CMDPARSER
+        parserUARTHandleInput();
+#endif
 
         checkTimer();
         twiMainLoop();
         keypressMainLoop();
         commandMainLoop();
         animationMainLoop();
-
-#ifdef SB_WITH_CMDPARSER
-        parserUARTHandleInput();
-#endif
+        handleInterrupts();
 
         // LV_("sleep? %d %d", global.wants_to_sleep, global.rfm_wants_to_sleep);
 
         if (global.wants_to_sleep)
         {
+        	pause_animation();
             enter_power_down_sleep();
+            continue_animation();
         }
         else
         {
