@@ -20,10 +20,65 @@ static struct _queue_t
     uint8_t pos;
 } command_queue = {{}, 0, 0};
 
+bool cmd_queue_is_empty()
+{
+    // LS_("cmd_queue_is_empty");
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        if (command_queue.read == command_queue.write)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool cmd_queue_is_full()
+{
+    // LS_("cmd_queue_is_full");
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        uint8_t next = ((command_queue.write + 1) & QUEUE_MASK);
+        if (command_queue.read == next)
+        {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool cmd_queue_get_empty_tail(cmd_queue_data_t **data)
+{
+    // LS_("command_queue_get_empty_tail");
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        uint8_t next = ((command_queue.write + 1) & QUEUE_MASK);
+        if (command_queue.read == next)
+            return false;
+
+        *data = &(command_queue.data[command_queue.write]);
+    }
+    return true;
+}
+
+bool cmd_queue_push_tail()
+{
+    // LS_("command_queue_push_tail");
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        uint8_t next = ((command_queue.write + 1) & QUEUE_MASK);
+        if (command_queue.read == next)
+            return false;
+
+        command_queue.write = next;
+    }
+    return true;
+}
+
 bool cmd_enqueue_data(uint8_t cmd, uint8_t const *data, uint8_t data_length)
 {
     LS_("cmd_enqueue_data");
-    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    //ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
     {
         uint8_t next = ((command_queue.write + 1) & QUEUE_MASK);
         if (command_queue.read == next)
@@ -111,4 +166,16 @@ bool cmd_dequeue_head(cmd_queue_data_t **head)
         command_queue.read = (command_queue.read + 1) & QUEUE_MASK;
     }
     return true;
+}
+
+void cmd_queue_print_status(void)
+{
+    ATOMIC_BLOCK(ATOMIC_RESTORESTATE)
+    {
+        LV_("read: %u", command_queue.read);
+        LV_("write: %u", command_queue.write);
+        LV_("empty: %u", command_queue_is_empty());
+        LV_("full: %u", command_queue_is_full());
+        //LV_("size: %u", command_queue_size());
+    }
 }

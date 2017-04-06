@@ -22,7 +22,7 @@
 
 #define TWI_CMD_REQUEST_INFO MATRIX_CMD_READ_CFG // 0xFD 253
 
-uint8_t const state_size = sizeof(struct _state_t);
+//uint8_t const state_size = sizeof(struct _state_t);
 
 // When there has been an error, this function is run and takes care of it
 unsigned char TWI_Act_On_Failure_In_Last_Transmission(unsigned char TWIerrorMsg);
@@ -31,12 +31,14 @@ void handleReceivedData(uint8_t const *recieveData, uint8_t receiveDataLength);
 void initCommunicationTwi(uint8_t deviceAddr)
 {
     LV_("i2c slave init, addr: %u 0x%X", deviceAddr, deviceAddr);
+    LV_("i2c slave tx size: %u", sizeof(struct _state_t));
 
     // Initialise TWI module for slave operation. Include address and/or enable General Call.
     // TWI_Slave_Initialise((unsigned char)((deviceAddr << TWI_ADR_BITS) | (TRUE << TWI_GEN_BIT)));
     TWI_Slave_Initialise((unsigned char)((deviceAddr << TWI_ADR_BITS)));
 
-    TWI_Set_Slave_Receive_Handler(&handleReceivedData);
+    //TWI_Set_Slave_Receive_Handler(&handleReceivedData);
+    TWI_Set_Slave_Transmit_Buffer((unsigned char *)&(global.state), sizeof(struct _state_t));
 
     // Start the TWI transceiver to enable reseption of the first command from the TWI Master.
     TWI_Start_Transceiver();
@@ -49,6 +51,7 @@ void handleReceivedData(uint8_t const *recieveData, uint8_t receiveDataLength)
 
     uint8_t cmd = recieveData[0];
 
+    /*
     if (cmd == TWI_CMD_REQUEST_INFO)
     {
         uint8_t pos = 0;
@@ -68,6 +71,7 @@ void handleReceivedData(uint8_t const *recieveData, uint8_t receiveDataLength)
         //LV_("hrd: INFO pos:%u data:%u", pos, state_size - pos);
     }
     else
+    */
     {
         //TWI_Start_Transceiver();
 
@@ -131,10 +135,12 @@ void twiMainLoop()
 
             // Check if the TWI Transceiver has already been started.
             // If not then restart it to prepare it for new receptions.
+            /*
             if (!TWI_Transceiver_Busy())
             {
                 TWI_Start_Transceiver();
             }
+            */
 
             LEDOFF(LED_ACTIVITY);
         }
@@ -151,7 +157,7 @@ unsigned char TWI_Act_On_Failure_In_Last_Transmission(unsigned char TWIerrorMsg)
     // and take appropriate actions.
     // See header file for a list of possible failures messages.
 
-    if (TWIerrorMsg != TWI_NO_STATE && TWIerrorMsg != TWI_STX_DATA_NACK)
+    if (TWIerrorMsg != TWI_NO_STATE)
         LV_("I2C error %u 0x%X", TWIerrorMsg, TWIerrorMsg);
 
     TWI_Start_Transceiver();

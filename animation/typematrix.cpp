@@ -105,13 +105,12 @@ void show_typematrix(animation_queue_data_t const *data)
 void start_typematrix(animation_queue_data_t const *data)
 {
     LS_("typematrix start");
-    // typematrix = (uint8_t *)malloc(MATRIX_WIDTH * MATRIX_HEIGHT * sizeof(uint8_t));
-    // memset(typematrix, 0, MATRIX_WIDTH * MATRIX_HEIGHT * sizeof(uint8_t));
 
     color_index = data->color;
     u8g_SetFont(&global.u8g, select_font(data->font));
 
-    wo = (u8g_GetWidth(&global.u8g) - MATRIX_WIDTH) / 2;
+    //wo = (u8g_GetWidth(&global.u8g) - MATRIX_WIDTH) / 2;
+    wo = 2;
     ho = (u8g_GetHeight(&global.u8g) - MATRIX_HEIGHT) / 2;
 
     draw_typematrix();
@@ -121,5 +120,4 @@ void stop_typematrix(animation_queue_data_t const *data)
 {
     LS_("typematrix stop");
     clean_matrix_display();
-    // free(typematrix);
 }

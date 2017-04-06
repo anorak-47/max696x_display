@@ -167,10 +167,10 @@ void animation_set_speed(uint16_t speed)
 
 void animation_set_typematrix_key(uint8_t row_number, matrix_row_t row)
 {
-    //if (!animation_is_running() || current_animation != MATRIX_CMD_ANIMATE_TYPEMATRIX)
+    // if (!animation_is_running() || current_animation != MATRIX_CMD_ANIMATE_TYPEMATRIX)
     //    return;
 
-    //LS_("set_typematrix_key");
+    // LS_("set_typematrix_key");
 
     update_typematrix(row_number, row);
 }
@@ -179,20 +179,20 @@ void animation_set_lock_state(uint8_t locks)
 {
     LS_("set_lock_state");
 
-    //TODO
+    // TODO
 }
 
 void cb_info_text(void *)
 {
-	LS_("cb_info_text");
+    LS_("cb_info_text");
 
-	delTimer(info_text_timer);
-	info_text_timer = -1;
+    delTimer(info_text_timer);
+    info_text_timer = -1;
 
-	if (!animation_is_running())
-		clean_matrix_display();
+    if (!animation_is_running())
+        clean_matrix_display();
 
-	continue_animation();
+    continue_animation();
 }
 
 void animation_show_info_text(animation_queue_data_t const *data)
@@ -234,7 +234,7 @@ bool animation_is_paused()
 
 uint8_t get_current_animation()
 {
-	return current_animation;
+    return current_animation;
 }
 
 void pause_animation()
@@ -244,7 +244,7 @@ void pause_animation()
 
     if (!animation.is_paused)
     {
-    	LS_("pause_animation");
+        LS_("pause_animation");
         animation.is_paused = true;
         global.state.animation_state = 2;
         pauseTimer(animation.loop_timer);
@@ -260,7 +260,7 @@ void continue_animation()
     if (animation.is_paused)
     {
         LS_("continue_animation");
-    	animation.is_paused = false;
+        animation.is_paused = false;
         global.state.animation_state = 1;
         continueTimer(animation.loop_timer);
         continueTimer(animation.duration_timer);
@@ -281,6 +281,7 @@ void stop_animation()
         animation.animationStop(&animation.data);
 
     animation.is_running = false;
+    animation.is_paused = false;
     global.state.animation_state = 0;
 }
 
@@ -301,8 +302,8 @@ void start_animation()
 {
     LV_("start_animation %u", animation.data.animation);
 
-	delTimer(info_text_timer);
-	info_text_timer = -1;
+    delTimer(info_text_timer);
+    info_text_timer = -1;
 
     animation.is_running = true;
     animation.is_paused = false;
@@ -314,10 +315,13 @@ void start_animation()
 
     if (animation.duration_in_s == 0 && animation.animationLoop)
     {
-        animation.animationLoop(&animation.data);
+        LS_("call once");
         animation.is_running = false;
         animation.is_paused = false;
         global.state.animation_state = 0;
+
+        if (animation.animationLoop)
+            animation.animationLoop(&animation.data);
     }
     else if (animation.delay_in_ms && animation.data.animation)
     {

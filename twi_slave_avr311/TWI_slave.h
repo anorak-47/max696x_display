@@ -63,11 +63,13 @@ extern union TWI_statusReg_t TWI_statusReg;
 ****************************************************************************/
 void TWI_Slave_Initialise(unsigned char);
 void TWI_Set_Slave_Receive_Handler(void (*TWISlaveRx_func)(uint8_t const *recieveData, uint8_t receiveDataLength));
+void TWI_Set_Slave_Transmit_Buffer(unsigned char* buffer, unsigned char msgSize);
 unsigned char TWI_Transceiver_Busy(void);
 unsigned char TWI_Transceiver_Transmitting(void);
 unsigned char TWI_Get_State_Info(void);
 void TWI_Start_Transceiver_With_Data(unsigned const char *, unsigned char);
-void TWI_Prepare_Transceiver_Data(unsigned const char *, unsigned char);
+void TWI_Prepare_Transmit_Data(unsigned const char *, unsigned char);
+void TWI_Prepare_Transmit_Buffer(unsigned char bufPos);
 void TWI_Start_Transceiver(void);
 unsigned char TWI_Get_Data_From_Transceiver(unsigned char *, unsigned char);
 

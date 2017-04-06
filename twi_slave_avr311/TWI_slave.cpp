@@ -41,6 +41,8 @@
 #include <avr/interrupt.h>
 #include <avr/io.h>
 #endif
+#include "../command_queue.h"
+#include "../commands.h"
 #include "../device_configuration.h"
 #include "TWI_slave.h"
 
@@ -63,6 +65,12 @@ static unsigned char TWI_state = TWI_NO_STATE; // State byte. Default set to TWI
 
 static volatile unsigned char TWI_bufPtr = 0;
 
+static unsigned char *TWI_TX_buf = 0;
+static unsigned char TWI_TX_msgSize = 0; // Number of bytes to be transmitted.
+static volatile unsigned char TWI_TX_bufPtr = 0;
+
+static cmd_queue_data_t *tail;
+
 // This is true when the TWI is in the middle of a transfer
 // and set to false when all bytes have been transmitted/received
 // Also used to determine how deep we can sleep.
@@ -70,11 +78,13 @@ static volatile unsigned char TWI_busy = 0;
 
 union TWI_statusReg_t TWI_statusReg = {0}; // TWI_statusReg is defined in TWI_Slave.h
 
+//#define TWI_CMD_REQUEST_INFO 0xFD // MATRIX_CMD_READ_CFG 0xFD 253
+#define TWI_CMD_REQUEST_INFO MATRIX_CMD_READ_CFG // 0xFD 253
+
 // function pointer to i2c receive routine
 // TWI_SlaveReceive is called when this processor
 // is addressed as a slave for writing
 static void (*TWI_SlaveReceive)(uint8_t const *recieveData, uint8_t receiveDataLength);
-
 
 /****************************************************************************
 Call this function to set up the TWI slave to its initial standby state.
@@ -87,7 +97,7 @@ start the TWI.
 ****************************************************************************/
 void TWI_Slave_Initialise(unsigned char TWI_ownAddress)
 {
-	TWI_SlaveReceive = 0;
+    TWI_SlaveReceive = 0;
     TWAR = TWI_ownAddress;                             // Set own TWI slave address. Accept TWI General Calls.
     TWCR = (1 << TWEN) |                               // Enable TWI-interface and release TWI pins.
            (0 << TWIE) | (0 << TWINT) |                // Disable TWI Interupt.
@@ -124,7 +134,14 @@ is addressed as a slave for writing
 ****************************************************************************/
 void TWI_Set_Slave_Receive_Handler(void (*TWISlaveRx_func)(uint8_t const *recieveData, uint8_t receiveDataLength))
 {
-	TWI_SlaveReceive = TWISlaveRx_func;
+    TWI_SlaveReceive = TWISlaveRx_func;
+}
+
+void TWI_Set_Slave_Transmit_Buffer(unsigned char *buffer, unsigned char msgSize)
+{
+    TWI_TX_buf = buffer;
+    TWI_TX_msgSize = msgSize;
+    TWI_TX_bufPtr = 0;
 }
 
 /****************************************************************************
@@ -159,10 +176,9 @@ void TWI_Start_Transceiver_With_Data(unsigned char const *msg, unsigned char msg
     TWI_busy = 1;
 }
 
-
-void TWI_Prepare_Transceiver_Data(unsigned const char *msg, unsigned char msgSize)
+void TWI_Prepare_Transmit_Data(unsigned const char *msg, unsigned char msgSize)
 {
-	unsigned char temp;
+    unsigned char temp;
 
     TWI_msgSize = msgSize;                 // Number of data to transmit.
     for (temp = 0; temp < msgSize; temp++) // Copy data that may be transmitted if the TWI Master requests data.
@@ -171,6 +187,11 @@ void TWI_Prepare_Transceiver_Data(unsigned const char *msg, unsigned char msgSiz
     }
 
     TWI_bufPtr = 0;
+}
+
+void TWI_Prepare_Transmit_Buffer(unsigned char bufPos)
+{
+    TWI_TX_bufPtr = bufPos;
 }
 
 /****************************************************************************
@@ -231,20 +252,34 @@ ISR(TWI_vect)
 {
     switch (TWSR)
     {
-    case TWI_STX_ADR_ACK: // Own SLA+R has been received; ACK has been returned
-    case TWI_STX_ADR_ACK_M_ARB_LOST: // Arbitration lost in SLA+R/W as Master; own SLA+R has been received; ACK has been returned
-        // TWI_bufPtr   = 0;                                 // Set buffer pointer to first data location
-        TWI_statusReg.RxDataBytes = 0;
+    /*
+     *
+     * Slave Transmit Mode (TX) -- send data to master
+     *
+     */
+    case TWI_STX_ADR_ACK:            // Own SLA+R has been received; ACK has been returned
+    case TWI_STX_ADR_ACK_M_ARB_LOST: // Arbitration lost in SLA+R/W as Master; own SLA+R has been received; ACK has been
+                                     // returned
+    // TWI_bufPtr   = 0;                                 // Set buffer pointer to first data location
+    // TWI_TX_bufPtr = 0;
+    // TWI_statusReg.RxDataBytes = 0;
+    // NO BREAK
     case TWI_STX_DATA_ACK: // Data byte in TWDR has been transmitted; ACK has been received
-        TWDR = TWI_buf[TWI_bufPtr++];
+
+        if (TWI_TX_bufPtr >= TWI_TX_msgSize)
+            TWI_TX_bufPtr = 0;
+
+        // TWDR = TWI_buf[TWI_bufPtr++];
+        TWDR = TWI_TX_buf[TWI_TX_bufPtr++];
         TWCR = (1 << TWEN) |                               // TWI Interface enabled
                (1 << TWIE) | (1 << TWINT) |                // Enable TWI Interupt and clear the flag to send byte
                (1 << TWEA) | (0 << TWSTA) | (0 << TWSTO) | //
                (0 << TWWC);                                //
         TWI_busy = 1;
         break;
-    case TWI_STX_DATA_NACK:            // Data byte in TWDR has been transmitted; NACK has been received.
-                                       // I.e. this could be the end of the transmission.
+    case TWI_STX_DATA_NACK: // Data byte in TWDR has been transmitted; NACK has been received.
+        // I.e. this could be the end of the transmission.
+        /*
         if (TWI_bufPtr == TWI_msgSize) // Have we transceived all expected data?
         {
             TWI_statusReg.lastTransOK = TRUE; // Set status bits to completed successfully.
@@ -253,6 +288,9 @@ ISR(TWI_vect)
         {
             TWI_state = TWSR; // Store TWI State as errormessage.
         }
+        */
+
+        TWI_statusReg.lastTransOK = TRUE; // Set status bits to completed successfully.
 
         TWCR = (1 << TWEN) |                               // Enable TWI-interface and release TWI pins
                (1 << TWIE) | (1 << TWINT) |                // Keep interrupt enabled and clear the flag
@@ -261,14 +299,26 @@ ISR(TWI_vect)
 
         TWI_busy = 0; // Transmit is finished, we are not busy anymore
         break;
+
+    /*
+     *
+     * Slave Receive Mode (RX) -- receive data from master
+     *
+     */
+
     case TWI_SRX_GEN_ACK: // General call address has been received; ACK has been returned
-        //    case TWI_SRX_GEN_ACK_M_ARB_LOST: // Arbitration lost in SLA+R/W as Master; General call address has been received; ACK has been returned
+        //    case TWI_SRX_GEN_ACK_M_ARB_LOST: // Arbitration lost in SLA+R/W as Master; General call address has been
+        //    received; ACK has been returned
         TWI_statusReg.genAddressCall = TRUE;
+    // NO BREAK
     case TWI_SRX_ADR_ACK: // Own SLA+W has been received ACK has been returned
-        //    case TWI_SRX_ADR_ACK_M_ARB_LOST: // Arbitration lost in SLA+R/W as Master; own SLA+W has been received; ACK has been returned
+        //    case TWI_SRX_ADR_ACK_M_ARB_LOST: // Arbitration lost in SLA+R/W as Master; own SLA+W has been received;
+        //    ACK has been returned
         // Dont need to clear TWI_S_statusRegister.generalAddressCall due to that it is the default state.
         TWI_statusReg.RxDataInBuf = TRUE;
+        // TWI_TX_bufPtr = 0;
         TWI_bufPtr = 0; // Set buffer pointer to first data location
+        // TWI_statusReg.RxDataBytes = 0;
 
         // Reset the TWI Interupt to wait for a new event.
         TWCR = (1 << TWEN) |                               // TWI Interface enabled
@@ -276,43 +326,90 @@ ISR(TWI_vect)
                (1 << TWEA) | (0 << TWSTA) | (0 << TWSTO) | // Expect ACK on this transmission
                (0 << TWWC);
         TWI_busy = 1;
-
         break;
     case TWI_SRX_ADR_DATA_ACK: // Previously addressed with own SLA+W; data has been received; ACK has been returned
     case TWI_SRX_GEN_DATA_ACK: // Previously addressed with general call; data has been received; ACK has been returned
-        TWI_buf[TWI_bufPtr++] = TWDR;
-        TWI_statusReg.RxDataBytes++;
-        TWI_statusReg.lastTransOK = TRUE;                  // Set flag transmission successfull.
-                                                           // Reset the TWI Interupt to wait for a new event.
+        TWI_buf[TWI_bufPtr] = TWDR;
+        TWI_statusReg.lastTransOK = TRUE; // Set flag transmission successfull.
+
+        if (TWI_bufPtr == 0)
+        {
+            if (TWI_buf[0] == TWI_CMD_REQUEST_INFO)
+            {
+                TWI_TX_bufPtr = 0;
+            }
+            else
+            {
+                if (cmd_queue_get_empty_tail(&tail))
+                {
+                    tail->cmd = TWI_buf[0];
+                }
+                else
+                {
+                    tail = 0;
+                }
+            }
+        }
+        else if (TWI_buf[0] == TWI_CMD_REQUEST_INFO)
+        {
+            TWI_TX_bufPtr = TWI_buf[1];
+        }
+        else if (tail != 0)
+        {
+            tail->raw[TWI_bufPtr] = TWI_buf[TWI_bufPtr];
+        }
+
+        TWI_bufPtr++;
+
+        // Reset the TWI Interupt to wait for a new event.
         TWCR = (1 << TWEN) |                               // TWI Interface enabled
                (1 << TWIE) | (1 << TWINT) |                // Enable TWI Interupt and clear the flag to send byte
                (1 << TWEA) | (0 << TWSTA) | (0 << TWSTO) | // Send ACK after next reception
                (0 << TWWC);                                //
         TWI_busy = 1;
         break;
-    case TWI_SRX_STOP_RESTART:              // A STOP condition or repeated START condition has been received while still addressed as Slave
+    case TWI_SRX_STOP_RESTART: // A STOP condition or repeated START condition has been received while still addressed
+                               // as Slave
 
-    	// i2c receive is complete, call TWI_SlaveReceive
-		if (TWI_SlaveReceive)
-			TWI_SlaveReceive(TWI_buf, TWI_statusReg.RxDataBytes);
+        if (TWI_buf[0] != TWI_CMD_REQUEST_INFO)
+        {
+            // TWI_statusReg.RxDataBytes = TWI_bufPtr;
 
-                                            // Enter not addressed mode and listen to address match
-        TWCR = (1 << TWEN) |                // Enable TWI-interface and release TWI pins
-               (1 << TWIE) | (1 << TWINT) | // Enable interrupt and clear the flag
+            if (tail != 0)
+            {
+                tail->data_length = TWI_bufPtr;
+                cmd_queue_push_tail();
+            }
+            /*
+            else
+            {
+                cmd_enqueue_data(TWI_buf[0], TWI_buf + 1, TWI_bufPtr - 1);
+            }
+            */
+
+            // i2c receive is complete, call TWI_SlaveReceive
+            // if (TWI_SlaveReceive)
+            //    TWI_SlaveReceive(TWI_buf, TWI_bufPtr);
+        }
+
+        // Enter not addressed mode and listen to address match
+        TWCR = (1 << TWEN) |                               // Enable TWI-interface and release TWI pins
+               (1 << TWIE) | (1 << TWINT) |                // Enable interrupt and clear the flag
                (1 << TWEA) | (0 << TWSTA) | (0 << TWSTO) | // Wait for new address match
                (0 << TWWC);                                //
 
         TWI_busy = 0; // We are waiting for a new address match, so we are not busy
-
         break;
-    case TWI_SRX_ADR_DATA_NACK:      // Previously addressed with own SLA+W; data has been received; NOT ACK has been returned
-    case TWI_SRX_GEN_DATA_NACK:      // Previously addressed with general call; data has been received; NOT ACK has been returned
+    case TWI_SRX_ADR_DATA_NACK:      // Previously addressed with own SLA+W; data has been received; NOT ACK has been
+                                     // returned
+    case TWI_SRX_GEN_DATA_NACK:      // Previously addressed with general call; data has been received; NOT ACK has been
+                                     // returned
     case TWI_STX_DATA_ACK_LAST_BYTE: // Last data byte in TWDR has been transmitted (TWEA = �0�); ACK has been received
-                                     //    case TWI_NO_STATE              // No relevant state information available; TWINT = �0�
-    case TWI_BUS_ERROR:              // Bus error due to an illegal START or STOP condition
-        TWI_state = TWSR;            // Store TWI State as errormessage, operation also clears noErrors bit
-        TWCR = (1 << TWSTO) |
-               (1 << TWINT); // Recover from TWI_BUS_ERROR, this will release the SDA and SCL pins thus enabling other devices to use the bus
+    //    case TWI_NO_STATE              // No relevant state information available; TWINT = �0�
+    case TWI_BUS_ERROR:                     // Bus error due to an illegal START or STOP condition
+        TWI_state = TWSR;                   // Store TWI State as errormessage, operation also clears noErrors bit
+        TWCR = (1 << TWSTO) | (1 << TWINT); // Recover from TWI_BUS_ERROR, this will release the SDA and SCL pins thus
+                                            // enabling other devices to use the bus
         break;
     default:
         TWI_state = TWSR;                                  // Store TWI State as errormessage, operation also clears the Success bit.

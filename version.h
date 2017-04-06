@@ -2,7 +2,7 @@
 #define __VERSION_H__
 
 #define VERSION_MAJOR 2
-#define VERSION_MINOR 3
+#define VERSION_MINOR 4
 
 #define xstr(s) str(s)
 #define str(s) #s
